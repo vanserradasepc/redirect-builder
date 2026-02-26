@@ -254,8 +254,10 @@ select.mf-input:focus, .mui-field.mf-focused select.mf-input { padding-right: ca
   color: #fff;
   font-family: 'Courier New', monospace;
   font-size: 0.82rem;
-  cursor: default;
+  cursor: text;
 }
+
+
 
 
 /* ══ OVERLAY ══ */
@@ -867,8 +869,8 @@ select.mf-input:focus, .mui-field.mf-focused select.mf-input { padding-right: ca
     <!-- Redirect data — special field -->
     <div class="form-row">
       <div class="form-field">
-        <div class="mui-field" id="redirect-mui-field">
-          <input class="mf-input redirect-input" id="redirect-data-display" type="text" readonly placeholder=" " style="font-family:'Courier New',monospace;font-size:0.82rem;cursor:default;">
+        <div class="mui-field redirect-field-wrap" id="redirect-mui-field">
+          <input class="mf-input redirect-input" id="redirect-data-display" type="text" placeholder=" " style="font-family:'Courier New',monospace;font-size:0.82rem;">
           <label class="mf-label" style="display:flex;align-items:center;gap:0.35rem;">
             <span>Redirect data</span>
             <span style="color:#2D3748;">-</span>
@@ -1090,6 +1092,7 @@ function confirmConfig() {
   if (text) field.classList.add('mf-floated');
   closeDrawer();
 }
+
 
 /* ── Helpers ── */
 function colorFor(i) { return COLORS[i % COLORS.length]; }
