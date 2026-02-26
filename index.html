@@ -950,6 +950,14 @@ function openDrawer() {
   document.getElementById('drawer').classList.add('open');
   document.getElementById('overlay').classList.add('active');
   document.body.style.overflow = 'hidden';
+  // Hide intro tour tooltip
+  document.getElementById('tour-intro').classList.remove('visible');
+  document.getElementById('tour-intro-arrow').classList.remove('visible');
+  // Start tour only on first open per page load
+  if (!tourActive && !tourSeen) {
+    tourSeen = true;
+    startTour();
+  }
 }
 function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
@@ -1333,6 +1341,379 @@ initMuiFields();
     });
   });
 })();
+</script>
+
+<!-- ══ GUIDED TOUR ══ -->
+<style>
+/* Tour overlay */
+#tour-backdrop {
+  position: fixed; inset: 0; z-index: 9000;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+#tour-backdrop.active { pointer-events: all; }
+
+/* SVG cutout spotlight */
+#tour-svg {
+  position: fixed; inset: 0; width: 100%; height: 100%;
+  z-index: 9001; pointer-events: none;
+}
+
+/* Tour tooltip card */
+#tour-tooltip {
+  position: fixed; z-index: 9100;
+  background: #1D1F25;
+  border: 1px solid #2D3748;
+  border-radius: 12px;
+  padding: 1.25rem 1.4rem;
+  width: 300px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  opacity: 0; pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 0.25s, transform 0.25s;
+}
+#tour-tooltip.visible {
+  opacity: 1; pointer-events: all;
+  transform: translateY(0);
+}
+.tour-step-badge {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em;
+  color: #FFE600; text-transform: uppercase; margin-bottom: 0.6rem;
+}
+.tour-step-dots {
+  display: flex; gap: 4px; margin-left: auto;
+}
+.tour-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #374151; transition: background 0.2s;
+}
+.tour-dot.active { background: #FFE600; }
+.tour-top-row {
+  display: flex; align-items: center; margin-bottom: 0.6rem;
+}
+#tour-title {
+  font-size: 0.92rem; font-weight: 700; color: #fff;
+  margin-bottom: 0.4rem;
+}
+#tour-desc {
+  font-size: 0.78rem; color: #9ca3af; line-height: 1.55;
+  margin-bottom: 1.1rem;
+}
+.tour-actions {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+}
+#tour-skip {
+  font-size: 0.75rem; color: #4b5563; cursor: pointer;
+  background: none; border: none; padding: 0;
+  transition: color 0.15s;
+}
+#tour-skip:hover { color: #9ca3af; }
+.tour-nav { display: flex; gap: 0.5rem; }
+#tour-prev {
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  background: none; border: 1px solid #2D3748;
+  color: #9ca3af; border-radius: 6px;
+  padding: 0.4rem 0.85rem; transition: border-color 0.15s, color 0.15s;
+}
+#tour-prev:hover { border-color: #6b7280; color: #fff; }
+#tour-next {
+  font-size: 0.78rem; font-weight: 700; cursor: pointer;
+  background: #FFE600; border: none; color: #111827;
+  border-radius: 6px; padding: 0.4rem 0.95rem;
+  transition: background 0.15s;
+}
+#tour-next:hover { background: #f5dc00; }
+
+/* Arrow pointer */
+#tour-arrow {
+  position: fixed; z-index: 9099;
+  width: 0; height: 0;
+  pointer-events: none;
+  transition: all 0.25s;
+}
+.arrow-up    { border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 9px solid #2D3748; }
+.arrow-down  { border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 9px solid #2D3748; }
+.arrow-left  { border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-right: 9px solid #2D3748; }
+.arrow-right { border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 9px solid #2D3748; }
+
+/* Intro tooltip */
+#tour-intro {
+  position: fixed; z-index: 9100;
+  background: #1D1F25;
+  border: 1px solid #FFE600;
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  width: 220px;
+  box-shadow: 0 8px 32px rgba(255,230,0,0.15);
+  opacity: 0; pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 0.3s, transform 0.3s;
+  cursor: pointer;
+}
+#tour-intro.visible { opacity: 1; pointer-events: all; transform: translateY(0); }
+#tour-intro:hover { border-color: #f5dc00; }
+.intro-pulse {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #FFE600; margin-right: 0.4rem; vertical-align: middle;
+  animation: pulse-ring 1.4s ease-out infinite;
+}
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(255,230,0,0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(255,230,0,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,230,0,0); }
+}
+#tour-intro-title {
+  font-size: 0.82rem; font-weight: 700; color: #fff; margin-bottom: 0.25rem;
+}
+#tour-intro-sub {
+  font-size: 0.72rem; color: #9ca3af; line-height: 1.45;
+}
+/* Intro arrow */
+#tour-intro-arrow {
+  position: fixed; z-index: 9099; pointer-events: none;
+  width: 0; height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 8px solid #FFE600;
+  opacity: 0; transition: opacity 0.3s;
+}
+#tour-intro-arrow.visible { opacity: 1; }
+</style>
+
+<!-- Intro tooltip (shown on load) -->
+<div id="tour-intro" onclick="startTour()">
+  <div id="tour-intro-title"><span class="intro-pulse"></span>Click here to start</div>
+  <div id="tour-intro-sub">Take a quick tour of the Redirect Data Builder.</div>
+</div>
+<div id="tour-intro-arrow"></div>
+
+<!-- Spotlight SVG -->
+<svg id="tour-svg" style="display:none">
+  <defs>
+    <mask id="tour-mask">
+      <rect width="100%" height="100%" fill="white"/>
+      <rect id="tour-hole" rx="8" fill="black"/>
+    </mask>
+  </defs>
+  <rect width="100%" height="100%" fill="rgba(0,0,0,0.72)" mask="url(#tour-mask)"/>
+</svg>
+
+<!-- Arrow -->
+<div id="tour-arrow"></div>
+
+<!-- Tooltip -->
+<div id="tour-tooltip">
+  <div class="tour-top-row">
+    <div class="tour-step-badge">
+      <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#FFE600"/></svg>
+      <span id="tour-step-label">Step 1 of 7</span>
+    </div>
+    <div class="tour-step-dots" id="tour-dots"></div>
+  </div>
+  <div id="tour-title"></div>
+  <div id="tour-desc"></div>
+  <div class="tour-actions">
+    <button id="tour-skip" onclick="endTour()">Skip tour</button>
+    <div class="tour-nav">
+      <button id="tour-prev" onclick="tourPrev()">Back</button>
+      <button id="tour-next" onclick="tourNext()">Next →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOUR_STEPS = [
+  {
+    title: 'Template ID',
+    desc: 'Choose which jump page design will be shown to users before they\'re sent to the partner. You can add multiple templates and split traffic between them.',
+    target: () => { if (!document.getElementById('drawer').classList.contains('open')) openDrawer(); return new Promise(r => setTimeout(() => r(document.querySelector('.drawer .card:nth-child(1) .section-title')), 350)); },
+    placement: 'left',
+    action: 'open-drawer',
+  },
+  {
+    title: 'Traffic Split',
+    desc: 'Drag the handles on the bar to split traffic between templates, or use the percentage inputs to set exact values. They must total 100%.',
+    target: () => document.getElementById('bar-track'),
+    placement: 'bottom',
+  },
+  {
+    title: 'Expiration Time',
+    desc: 'Set how long the jump page link stays active. Once it expires, users are redirected to the internal offer instead.',
+    target: () => document.querySelector('.drawer .card:nth-child(2) .section-title'),
+    placement: 'left',
+  },
+  {
+    title: 'Toggles',
+    desc: 'Fine-tune redirect behaviour: disable the popunder, force SMS expiry, or require IP matching. Each toggle is explained with a tooltip.',
+    target: () => document.querySelector('.drawer .card:nth-child(3)'),
+    placement: 'left',
+  },
+  {
+    title: 'Auto-Redirect Delay',
+    desc: 'Set how many seconds the jump page waits before automatically redirecting users to the partner.',
+    target: () => document.querySelector('.drawer .card:nth-child(4)'),
+    placement: 'left',
+  },
+  {
+    title: 'Generated Config & Confirm',
+    desc: 'The config string updates live as you make changes. Hit Copy to grab it, or Confirm to write it back to the Redirect data field.',
+    target: () => document.querySelector('.drawer-footer'),
+    placement: 'top',
+  },
+];
+
+let tourStep = 0;
+let tourActive = false;
+let tourSeen = false;
+
+function positionIntro() {
+  const el = document.querySelector('.open-builder-link');
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const intro = document.getElementById('tour-intro');
+  const arrow = document.getElementById('tour-intro-arrow');
+  const iw = 220;
+  // Position tooltip below the link
+  const top = rect.bottom + 14;
+  const left = Math.min(Math.max(rect.left + rect.width / 2 - iw / 2, 12), window.innerWidth - iw - 12);
+  intro.style.position = 'fixed';
+  intro.style.top = top + 'px';
+  intro.style.left = left + 'px';
+  // Arrow above tooltip pointing up
+  arrow.style.top = (rect.bottom + 5) + 'px';
+  arrow.style.left = (rect.left + rect.width / 2 - 7) + 'px';
+  arrow.style.position = 'fixed';
+  intro.classList.add('visible');
+  arrow.classList.add('visible');
+}
+
+function startTour() {
+  // Hide intro
+  document.getElementById('tour-intro').classList.remove('visible');
+  document.getElementById('tour-intro-arrow').classList.remove('visible');
+  tourActive = true;
+  tourStep = 0;
+  document.getElementById('tour-svg').style.display = 'block';
+  buildDots();
+  showTourStep(tourStep);
+}
+
+function endTour() {
+  tourActive = false;
+  document.getElementById('tour-svg').style.display = 'none';
+  document.getElementById('tour-tooltip').classList.remove('visible');
+  document.getElementById('tour-arrow').className = '';
+  document.getElementById('tour-arrow').style.cssText = '';
+  // Reset hole
+  const hole = document.getElementById('tour-hole');
+  hole.setAttribute('width', '0'); hole.setAttribute('height', '0');
+}
+
+// Show intro tooltip on every page load
+window.addEventListener('load', () => setTimeout(positionIntro, 600));
+
+function tourNext() {
+  if (tourStep < TOUR_STEPS.length - 1) { tourStep++; showTourStep(tourStep); }
+  else endTour();
+}
+function tourPrev() {
+  if (tourStep > 0) { tourStep--; showTourStep(tourStep); }
+}
+
+function buildDots() {
+  const container = document.getElementById('tour-dots');
+  container.innerHTML = '';
+  TOUR_STEPS.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'tour-dot';
+    d.id = `tour-dot-${i}`;
+    container.appendChild(d);
+  });
+}
+
+async function showTourStep(idx) {
+  const step = TOUR_STEPS[idx];
+  const tooltip = document.getElementById('tour-tooltip');
+  tooltip.classList.remove('visible');
+
+  // Update text
+  document.getElementById('tour-step-label').textContent = `Step ${idx + 1} of ${TOUR_STEPS.length}`;
+  document.getElementById('tour-title').textContent = step.title;
+  document.getElementById('tour-desc').textContent = step.desc;
+  document.getElementById('tour-prev').style.display = idx === 0 ? 'none' : '';
+  document.getElementById('tour-next').textContent = idx === TOUR_STEPS.length - 1 ? 'Finish ✓' : 'Next →';
+
+  // Dots
+  document.querySelectorAll('.tour-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === idx);
+  });
+
+  // Get target element
+  let el = step.target();
+  if (el instanceof Promise) el = await el;
+  if (!el) { tooltip.classList.add('visible'); return; }
+
+  // Wait a tick for drawer animation
+  await new Promise(r => setTimeout(r, 50));
+
+  positionTour(el, step.placement);
+  setTimeout(() => tooltip.classList.add('visible'), 80);
+}
+
+function positionTour(el, placement) {
+  const rect = el.getBoundingClientRect();
+  const pad = 8;
+  const hole = document.getElementById('tour-hole');
+  const tooltip = document.getElementById('tour-tooltip');
+  const arrow = document.getElementById('tour-arrow');
+
+  // Spotlight hole
+  hole.setAttribute('x', rect.left - pad);
+  hole.setAttribute('y', rect.top - pad);
+  hole.setAttribute('width', rect.width + pad * 2);
+  hole.setAttribute('height', rect.height + pad * 2);
+  hole.setAttribute('rx', '8');
+
+  // Tooltip positioning
+  const tw = 300, th = 180;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let top, left, arrowClass, arrowTop, arrowLeft;
+
+  if (placement === 'bottom') {
+    top = rect.bottom + pad + 12;
+    left = Math.min(Math.max(rect.left + rect.width / 2 - tw / 2, 12), vw - tw - 12);
+    arrowClass = 'arrow-up';
+    arrowTop = rect.bottom + pad + 3;
+    arrowLeft = rect.left + rect.width / 2 - 8;
+  } else if (placement === 'top') {
+    top = rect.top - pad - th - 20;
+    left = Math.min(Math.max(rect.left + rect.width / 2 - tw / 2, 12), vw - tw - 12);
+    arrowClass = 'arrow-down';
+    arrowTop = rect.top - pad - 10;
+    arrowLeft = rect.left + rect.width / 2 - 8;
+  } else if (placement === 'left') {
+    top = Math.min(Math.max(rect.top + rect.height / 2 - th / 2, 12), vh - th - 12);
+    left = rect.left - tw - pad - 20;
+    if (left < 12) { left = rect.right + pad + 20; arrowClass = 'arrow-left'; arrowLeft = left - 10; }
+    else { arrowClass = 'arrow-right'; arrowLeft = left + tw + 1; }
+    arrowTop = rect.top + rect.height / 2 - 8;
+  } else {
+    top = Math.min(Math.max(rect.top + rect.height / 2 - th / 2, 12), vh - th - 12);
+    left = rect.right + pad + 20;
+    arrowClass = 'arrow-left';
+    arrowLeft = left - 10;
+    arrowTop = rect.top + rect.height / 2 - 8;
+  }
+
+  tooltip.style.top = `${top}px`;
+  tooltip.style.left = `${left}px`;
+
+  arrow.className = arrowClass;
+  arrow.style.top = `${arrowTop}px`;
+  arrow.style.left = `${arrowLeft}px`;
+  arrow.style.position = 'fixed';
+}
 </script>
 </body>
 </html>
